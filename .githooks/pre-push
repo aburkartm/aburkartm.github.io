@@ -1,0 +1,23 @@
+#!/bin/sh
+# .githooks/pre-push — escaneo de secretos antes de cada push, en ambos equipos.
+# Ejecutado por git de forma SINCRONA y BLOQUEANTE — no hay run_in_background,
+# no puede haberlo: git no soporta hooks asincronos, por diseño.
+
+GITLEAKS_BIN="$(git rev-parse --show-toplevel)/.githooks/bin/gitleaks.exe"
+
+if [ ! -x "$GITLEAKS_BIN" ]; then
+    echo "pre-push: gitleaks no encontrado en $GITLEAKS_BIN — push bloqueado por seguridad." >&2
+    exit 1
+fi
+
+"$GITLEAKS_BIN" detect --source "$(git rev-parse --show-toplevel)" --redact --exit-code 1
+GITLEAKS_EXIT=$?
+
+if [ "$GITLEAKS_EXIT" -ne 0 ]; then
+    echo "" >&2
+    echo "pre-push: gitleaks encontro posibles secretos. Push ABORTADO." >&2
+    echo "El commit local sigue existiendo — revisa el detalle arriba antes de reintentar." >&2
+    exit 1
+fi
+
+exit 0

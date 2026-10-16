@@ -1,0 +1,51 @@
+#!/bin/sh
+# .githooks/pre-commit — chequeo de sintaxis antes de cada commit, en ambos equipos.
+# Ejecucion SINCRONA y BLOQUEANTE — git espera este exit code antes de crear el commit.
+
+STAGED_PY=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$')
+STAGED_JS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(js|mjs|cjs)$')
+STAGED_PS1=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.ps1$')
+
+FAILED=0
+
+if [ -n "$STAGED_PY" ]; then
+    for f in $STAGED_PY; do
+        python -m py_compile "$f"
+        if [ $? -ne 0 ]; then
+            echo "pre-commit: error de sintaxis en $f" >&2
+            FAILED=1
+        fi
+    done
+fi
+
+if [ -n "$STAGED_JS" ]; then
+    for f in $STAGED_JS; do
+        node --check "$f"
+        if [ $? -ne 0 ]; then
+            echo "pre-commit: error de sintaxis en $f" >&2
+            FAILED=1
+        fi
+    done
+fi
+
+if [ -n "$STAGED_PS1" ]; then
+    for f in $STAGED_PS1; do
+        powershell -NoProfile -NonInteractive -Command "
+            \$tokens = \$null; \$parseErrors = \$null
+            [System.Management.Automation.Language.Parser]::ParseFile('$f', [ref]\$tokens, [ref]\$parseErrors) | Out-Null
+            if (\$parseErrors.Count -gt 0) { exit 1 } else { exit 0 }
+        "
+        if [ $? -ne 0 ]; then
+            echo "pre-commit: error de sintaxis en $f" >&2
+            FAILED=1
+        fi
+    done
+fi
+
+if [ "$FAILED" -ne 0 ]; then
+    echo "" >&2
+    echo "pre-commit: commit ABORTADO por errores de sintaxis arriba." >&2
+    exit 1
+fi
+
+exit 0
