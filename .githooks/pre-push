@@ -34,14 +34,17 @@ escanear() {  # escanear [opciones de git log]; vacio = historial completo
     fi
 }
 
-CERO=0000000000000000000000000000000000000000
+# Un sha "en ceros" (rama nueva o borrada) se reconoce por patron y no con el
+# literal de 40 ceros: el pre-commit de los repos con datos personales bloquea
+# cualquier corrida de 13+ digitos.
+no_es_cero() { case "$1" in *[!0]*) return 0 ;; esac; return 1; }
 LEIDAS=0
 GITLEAKS_EXIT=0
 while read -r REF_LOCAL SHA_LOCAL REF_REMOTA SHA_REMOTO; do
     [ -n "$SHA_LOCAL" ] || continue
     LEIDAS=$((LEIDAS + 1))
-    [ "$SHA_LOCAL" = "$CERO" ] && continue
-    if [ "$SHA_REMOTO" != "$CERO" ] && git cat-file -e "$SHA_REMOTO^{commit}" 2>/dev/null; then
+    no_es_cero "$SHA_LOCAL" || continue
+    if no_es_cero "$SHA_REMOTO" && git cat-file -e "$SHA_REMOTO^{commit}" 2>/dev/null; then
         RANGO="$SHA_REMOTO..$SHA_LOCAL"
     else
         RANGO="$SHA_LOCAL --not --remotes=${1:-origin}"
