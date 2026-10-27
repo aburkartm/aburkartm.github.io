@@ -2,16 +2,56 @@
 # .githooks/pre-push — escaneo de secretos antes de cada push, en ambos equipos.
 # Ejecutado por git de forma SINCRONA y BLOQUEANTE — no hay run_in_background,
 # no puede haberlo: git no soporta hooks asincronos, por diseño.
+#
+# Escanea SOLO los commits que este push sube (desde el 2026-10-27). Antes
+# escaneaba el historial entero en cada push (oficina-md: 2.800 commits, 17 s):
+# lo ya subido se escaneo cuando se subio, repetirlo no protege nada mas. Y la
+# demora no era inocua: git abre la conexion con GitHub ANTES de correr este hook
+# y la deja esperando; con el hook rozando el minuto, GitHub la cortaba y el push
+# fallaba con "send-pack: unexpected disconnect while reading sideband packet".
+#
+# git entrega por stdin una linea por ref: <ref local> <sha local> <ref remota> <sha remoto>.
+#   sha local en ceros            -> se borra una rama: nada que escanear.
+#   sha remoto presente aca       -> se escanea <remoto>..<local>.
+#   rama nueva, o sha remoto que
+#   este equipo no tiene          -> <local> menos lo que ya esta en las ramas de ese remoto.
+# Sin stdin (invocado a mano o por un test): historial completo, como antes.
+# Cualquier error de gitleaks bloquea el push: falla cerrado.
 
-GITLEAKS_BIN="$(git rev-parse --show-toplevel)/.githooks/bin/gitleaks.exe"
+RAIZ="$(git rev-parse --show-toplevel)"
+GITLEAKS_BIN="$RAIZ/.githooks/bin/gitleaks.exe"
 
 if [ ! -x "$GITLEAKS_BIN" ]; then
     echo "pre-push: gitleaks no encontrado en $GITLEAKS_BIN — push bloqueado por seguridad." >&2
     exit 1
 fi
 
-"$GITLEAKS_BIN" detect --source "$(git rev-parse --show-toplevel)" --redact --exit-code 1
-GITLEAKS_EXIT=$?
+escanear() {  # escanear [opciones de git log]; vacio = historial completo
+    if [ -n "$1" ]; then
+        "$GITLEAKS_BIN" git --redact --exit-code 1 --log-opts="$1" "$RAIZ" </dev/null
+    else
+        "$GITLEAKS_BIN" git --redact --exit-code 1 "$RAIZ" </dev/null
+    fi
+}
+
+CERO=0000000000000000000000000000000000000000
+LEIDAS=0
+GITLEAKS_EXIT=0
+while read -r REF_LOCAL SHA_LOCAL REF_REMOTA SHA_REMOTO; do
+    [ -n "$SHA_LOCAL" ] || continue
+    LEIDAS=$((LEIDAS + 1))
+    [ "$SHA_LOCAL" = "$CERO" ] && continue
+    if [ "$SHA_REMOTO" != "$CERO" ] && git cat-file -e "$SHA_REMOTO^{commit}" 2>/dev/null; then
+        RANGO="$SHA_REMOTO..$SHA_LOCAL"
+    else
+        RANGO="$SHA_LOCAL --not --remotes=${1:-origin}"
+    fi
+    escanear "$RANGO" || GITLEAKS_EXIT=1
+done
+if [ "$LEIDAS" -eq 0 ]; then
+    escanear ""
+    GITLEAKS_EXIT=$?
+fi
 
 if [ "$GITLEAKS_EXIT" -ne 0 ]; then
     echo "" >&2
