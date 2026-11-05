@@ -10,7 +10,7 @@ FAILED=0
 
 if [ -n "$STAGED_PY" ]; then
     for f in $STAGED_PY; do
-        python -m py_compile "$f"
+        python -W error::SyntaxWarning -m py_compile "$f"  # una barra invalida en un docstring tambien bloquea (2026-11-05)
         if [ $? -ne 0 ]; then
             echo "pre-commit: error de sintaxis en $f" >&2
             FAILED=1
