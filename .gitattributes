@@ -1,0 +1,12 @@
+# Los hooks de git son scripts que ejecuta /bin/sh — con core.autocrlf=true
+# (el default de este equipo) un clon nuevo los sacaria con CRLF y fallarian con
+# "bad interpreter: /bin/sh^M". Forzar LF siempre, en cualquier equipo.
+.githooks/** text eol=lf
+.claude/hooks/*.sh text eol=lf
+*.sh text eol=lf
+
+# El binario de gitleaks vive bajo .githooks/ y la regla de arriba lo alcanza
+# por el patron .githooks/**, marcandolo "text" y normalizando CRLF->LF dentro
+# de sus bytes (claude-workflows: git hash-object con y sin filtro daban hashes
+# distintos). Excepcion explicita, va DESPUES de la regla de arriba para ganar.
+.githooks/bin/*.exe -text
