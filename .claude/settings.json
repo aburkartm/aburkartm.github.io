@@ -5,7 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PROJECT_DIR}\"/.claude/hooks/session-start-sync.sh"
+            "command": "\"C:/Dev/aburkartm.github.io\"/.claude/hooks/session-start-sync.sh",
+            "timeout": 45
           }
         ]
       }
